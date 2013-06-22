@@ -1,0 +1,10 @@
+bin
+obj
+*.suo
+*.user
+Xpand.dll
+Build/Temp
+*.cache
+/*.bak
+TestResults
+
