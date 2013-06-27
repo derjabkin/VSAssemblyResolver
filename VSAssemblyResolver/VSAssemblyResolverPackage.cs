@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
@@ -33,7 +34,7 @@ namespace SergejDerjabkin.VSAssemblyResolver
     [PackageRegistration(UseManagedResourcesOnly = true)]
     // This attribute is used to register the information needed to show this package
     // in the Help/About dialog of Visual Studio.
-    [InstalledProductRegistration("#110", "#112", "1.0", IconResourceID = 400)]
+    [InstalledProductRegistration("#110", "#112", "0.0.3", IconResourceID = 400)]
     // This attribute is needed to let the shell know that this package exposes some menus.
     [ProvideMenuResource("Menus.ctmenu", 1)]
     [ProvideAutoLoad(VSConstants.UICONTEXT.SolutionHasSingleProject_string)]
@@ -68,18 +69,17 @@ namespace SergejDerjabkin.VSAssemblyResolver
             AppDomain.CurrentDomain.AssemblyResolve += CurrentDomain_AssemblyResolve;
             AppDomain.CurrentDomain.ReflectionOnlyAssemblyResolve += CurrentDomain_ReflectionOnlyAssemblyResolve;
 
-            
-            Debug.WriteLine (string.Format(CultureInfo.CurrentCulture, "Entering Initialize() of: {0}", this.ToString()));
+            Debug.WriteLine(string.Format(CultureInfo.CurrentCulture, "Entering Initialize() of: {0}", this.ToString()));
             base.Initialize();
 
             // Add our command handlers for menu (commands must exist in the .vsct file)
             OleMenuCommandService mcs = GetService(typeof(IMenuCommandService)) as OleMenuCommandService;
-            if ( null != mcs )
+            if (null != mcs)
             {
                 // Create the command for the menu item.
                 CommandID menuCommandID = new CommandID(GuidList.guidVSAssemblyResolverCmdSet, (int)PkgCmdIDList.cmdidPopulateToolbox);
-                MenuCommand menuItem = new MenuCommand(MenuItemCallback, menuCommandID );
-                mcs.AddCommand( menuItem );
+                MenuCommand menuItem = new MenuCommand(MenuItemCallback, menuCommandID);
+                mcs.AddCommand(menuItem);
             }
         }
 
@@ -88,9 +88,10 @@ namespace SergejDerjabkin.VSAssemblyResolver
             string path = GetAssemblyPath(args.Name);
             if (!string.IsNullOrWhiteSpace(path))
                 return Assembly.ReflectionOnlyLoadFrom(path);
-            
+
             return null;
         }
+
 
         private IEnumerable<string> GetReferenceDirectoriesEnum()
         {
@@ -122,17 +123,15 @@ namespace SergejDerjabkin.VSAssemblyResolver
             DynamicTypeService typeResolver = (DynamicTypeService)GetService(typeof(DynamicTypeService));
             var dirs = GetReferenceDirectories();
             AssemblyName asmName = new AssemblyName(name);
+            
             foreach (var dir in dirs)
             {
                 string path = Path.Combine(dir, asmName.Name + ".dll");
                 if (File.Exists(path))
                 {
-                    var refAssembly = Assembly.ReflectionOnlyLoadFrom(path);
-                    var foundName = refAssembly.GetName();
-                    if (asmName.Name == foundName.Name &&
-                        (asmName.Version == null) || (asmName.Version == foundName.Version) &&
-                        (asmName.GetPublicKeyToken() == null ||
-                         asmName.GetPublicKeyToken().SequenceEqual(foundName.GetPublicKeyToken())))
+                    var foundName = AssemblyName.GetAssemblyName(path);
+                    
+                    if (IsNameCompatible(foundName, asmName))
                     {
                         return path;
                     }
@@ -141,16 +140,68 @@ namespace SergejDerjabkin.VSAssemblyResolver
 
             return null;
         }
-        System.Reflection.Assembly CurrentDomain_AssemblyResolve(object sender, ResolveEventArgs args)
+
+        private static bool IsNameCompatible(AssemblyName fullName, AssemblyName partialName)
+        {
+            return partialName.Name == fullName.Name &&
+                   ((partialName.Version == null) || (partialName.Version == fullName.Version)) &&
+                   ((partialName.GetPublicKeyToken() == null ||
+                    partialName.GetPublicKeyToken().SequenceEqual(fullName.GetPublicKeyToken())));
+        }
+
+
+        private Assembly FindLoadedAssembly(AssemblyName asmName)
         {
             
-            DynamicTypeService typeResolver = (DynamicTypeService)GetService(typeof(DynamicTypeService));
-            string path = GetAssemblyPath(args.Name);
-            if (!string.IsNullOrWhiteSpace(path))
-                return typeResolver.CreateDynamicAssembly(path);
-
             
-            return null;
+            return AppDomain.CurrentDomain.GetAssemblies().FirstOrDefault(a => IsNameCompatible(a.GetName(), asmName));
+        }
+
+
+        private static bool resolving;
+
+        System.Reflection.Assembly CurrentDomain_AssemblyResolve(object sender, ResolveEventArgs args)
+        {
+            if (resolving)
+                return null;
+
+            resolving = true;
+            try
+            {
+
+                IVsSolution solution = (IVsSolution) GetService(typeof (IVsSolution));
+                DTE dte = (DTE) GetService(typeof (DTE));
+                var project = ((IEnumerable<object>) dte.ActiveSolutionProjects).OfType<Project>().FirstOrDefault();
+
+                IVsHierarchy hierarchy = null;
+
+                if (project != null)
+                    solution.GetProjectOfUniqueName(project.FullName, out hierarchy);
+
+                AssemblyName asmName = new AssemblyName(args.Name);
+
+                Assembly loaded = FindLoadedAssembly(asmName);
+                if (loaded != null) return loaded;
+
+                DynamicTypeService typeResolver = (DynamicTypeService) GetService(typeof (DynamicTypeService));
+                if (hierarchy != null)
+                {
+                    var trs = typeResolver.GetTypeResolutionService(hierarchy);
+                    var trsAssembly = trs.GetAssembly(asmName);
+                    if (trsAssembly != null)
+                        return trsAssembly;
+                }
+                string path = GetAssemblyPath(args.Name);
+                if (!string.IsNullOrWhiteSpace(path))
+                    return typeResolver.CreateDynamicAssembly(path);
+
+
+                return null;
+            }
+            finally
+            {
+                resolving = false;
+            }
         }
         #endregion
 
