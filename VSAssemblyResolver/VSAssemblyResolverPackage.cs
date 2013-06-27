@@ -152,8 +152,6 @@ namespace SergejDerjabkin.VSAssemblyResolver
 
         private Assembly FindLoadedAssembly(AssemblyName asmName)
         {
-            
-            
             return AppDomain.CurrentDomain.GetAssemblies().FirstOrDefault(a => IsNameCompatible(a.GetName(), asmName));
         }
 
@@ -169,28 +167,17 @@ namespace SergejDerjabkin.VSAssemblyResolver
             try
             {
 
-                IVsSolution solution = (IVsSolution) GetService(typeof (IVsSolution));
-                DTE dte = (DTE) GetService(typeof (DTE));
-                var project = ((IEnumerable<object>) dte.ActiveSolutionProjects).OfType<Project>().FirstOrDefault();
-
-                IVsHierarchy hierarchy = null;
-
-                if (project != null)
-                    solution.GetProjectOfUniqueName(project.FullName, out hierarchy);
-
+                AppDomain domain = (AppDomain) sender;
                 AssemblyName asmName = new AssemblyName(args.Name);
-
-                Assembly loaded = FindLoadedAssembly(asmName);
-                if (loaded != null) return loaded;
+                try
+                {
+                    return domain.Load(asmName);
+                }
+                catch (FileNotFoundException)
+                {
+                }
 
                 DynamicTypeService typeResolver = (DynamicTypeService) GetService(typeof (DynamicTypeService));
-                if (hierarchy != null)
-                {
-                    var trs = typeResolver.GetTypeResolutionService(hierarchy);
-                    var trsAssembly = trs.GetAssembly(asmName);
-                    if (trsAssembly != null)
-                        return trsAssembly;
-                }
                 string path = GetAssemblyPath(args.Name);
                 if (!string.IsNullOrWhiteSpace(path))
                     return typeResolver.CreateDynamicAssembly(path);
