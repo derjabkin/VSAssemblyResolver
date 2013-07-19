@@ -114,7 +114,23 @@ namespace SergejDerjabkin.VSAssemblyResolver
 
         private string[] GetReferenceDirectories()
         {
-            return GetReferenceDirectoriesEnum().Distinct().ToArray();
+            DTE dte = (DTE)GetService(typeof(DTE));
+
+            var dirs =
+                new string[] { Path.Combine(Path.GetDirectoryName(dte.Solution.FileName), "packages") }
+                    .Concat(GetReferenceDirectoriesEnum())
+                    .Select(d => Path.GetFullPath(d))
+                    .OrderBy(s => s.Length)
+                    .ToList();
+
+
+            for (int i = 1; i < dirs.Count; i++)
+            {
+                if (dirs.Where(d => dirs[i].StartsWith(d, StringComparison.OrdinalIgnoreCase), 0, i - 1).Any())
+                    dirs.RemoveAt(i--);
+            }
+
+            return dirs.ToArray();
         }
 
 
@@ -123,17 +139,20 @@ namespace SergejDerjabkin.VSAssemblyResolver
             DynamicTypeService typeResolver = (DynamicTypeService)GetService(typeof(DynamicTypeService));
             var dirs = GetReferenceDirectories();
             AssemblyName asmName = new AssemblyName(name);
-            
-            foreach (var dir in dirs)
+
+            foreach (var rootDir in dirs)
             {
-                string path = Path.Combine(dir, asmName.Name + ".dll");
-                if (File.Exists(path))
+                foreach(var dir in  Directory.GetDirectories(rootDir,"*.*", SearchOption.AllDirectories))
                 {
-                    var foundName = AssemblyName.GetAssemblyName(path);
-                    
-                    if (IsNameCompatible(foundName, asmName))
+                    string path = Path.Combine(dir, asmName.Name + ".dll");
+                    if (File.Exists(path))
                     {
-                        return path;
+                        var foundName = AssemblyName.GetAssemblyName(path);
+
+                        if (IsNameCompatible(foundName, asmName))
+                        {
+                            return path;
+                        }
                     }
                 }
             }
@@ -167,17 +186,22 @@ namespace SergejDerjabkin.VSAssemblyResolver
             try
             {
 
-                AppDomain domain = (AppDomain) sender;
+                AppDomain domain = (AppDomain)sender;
                 AssemblyName asmName = new AssemblyName(args.Name);
                 try
                 {
                     return domain.Load(asmName);
                 }
+                catch (FileLoadException ex)
+                {
+                    string a = ex.ToString();
+                }
+
                 catch (FileNotFoundException)
                 {
                 }
 
-                DynamicTypeService typeResolver = (DynamicTypeService) GetService(typeof (DynamicTypeService));
+                DynamicTypeService typeResolver = (DynamicTypeService)GetService(typeof(DynamicTypeService));
                 string path = GetAssemblyPath(args.Name);
                 if (!string.IsNullOrWhiteSpace(path))
                     return typeResolver.CreateDynamicAssembly(path);
