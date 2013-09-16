@@ -34,7 +34,7 @@ namespace SergejDerjabkin.VSAssemblyResolver
     [PackageRegistration(UseManagedResourcesOnly = true)]
     // This attribute is used to register the information needed to show this package
     // in the Help/About dialog of Visual Studio.
-    [InstalledProductRegistration("#110", "#112", "0.0.3", IconResourceID = 400)]
+    [InstalledProductRegistration("#110", "#112", "0.0.4", IconResourceID = 400)]
     // This attribute is needed to let the shell know that this package exposes some menus.
     [ProvideMenuResource("Menus.ctmenu", 1)]
     [ProvideAutoLoad(VSConstants.UICONTEXT.SolutionHasSingleProject_string)]
@@ -142,7 +142,8 @@ namespace SergejDerjabkin.VSAssemblyResolver
 
             foreach (var rootDir in dirs)
             {
-                foreach(var dir in  Directory.GetDirectories(rootDir,"*.*", SearchOption.AllDirectories))
+
+                foreach(var dir in  rootDir.ToEnumerable().Concat(Directory.GetDirectories(rootDir,"*.*", SearchOption.AllDirectories)))
                 {
                     string path = Path.Combine(dir, asmName.Name + ".dll");
                     if (File.Exists(path))
@@ -179,6 +180,7 @@ namespace SergejDerjabkin.VSAssemblyResolver
 
         System.Reflection.Assembly CurrentDomain_AssemblyResolve(object sender, ResolveEventArgs args)
         {
+            Trace.TraceInformation("Resolving assembly {0}", args.Name);
             if (resolving)
                 return null;
 

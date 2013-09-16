@@ -18,5 +18,10 @@ namespace SergejDerjabkin.VSAssemblyResolver
                 if (predicate(list[i])) yield return list[i];
             }
         }
+
+        internal static IEnumerable<T> ToEnumerable<T>(this T item)
+        {
+            yield return item;
+        }
     }
 }
