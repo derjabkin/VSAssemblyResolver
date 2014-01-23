@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
@@ -9,10 +8,8 @@ using System.Reflection;
 using System.Runtime.InteropServices;
 using System.ComponentModel.Design;
 using Microsoft.VisualStudio.Shell.Design;
-using Microsoft.Win32;
 using Microsoft.VisualStudio;
 using Microsoft.VisualStudio.Shell.Interop;
-using Microsoft.VisualStudio.OLE.Interop;
 using Microsoft.VisualStudio.Shell;
 using EnvDTE;
 using VSLangProj;
@@ -34,7 +31,7 @@ namespace SergejDerjabkin.VSAssemblyResolver
     [PackageRegistration(UseManagedResourcesOnly = true)]
     // This attribute is used to register the information needed to show this package
     // in the Help/About dialog of Visual Studio.
-    [InstalledProductRegistration("#110", "#112", "0.0.4", IconResourceID = 400)]
+    [InstalledProductRegistration("#110", "#112", "0.5", IconResourceID = 400)]
     // This attribute is needed to let the shell know that this package exposes some menus.
     [ProvideMenuResource("Menus.ctmenu", 1)]
     [ProvideAutoLoad(VSConstants.UICONTEXT.SolutionHasSingleProject_string)]
@@ -53,6 +50,7 @@ namespace SergejDerjabkin.VSAssemblyResolver
         {
             Debug.WriteLine(string.Format(CultureInfo.CurrentCulture, "Entering constructor for: {0}", this.ToString()));
         }
+
 
 
 
@@ -136,23 +134,28 @@ namespace SergejDerjabkin.VSAssemblyResolver
 
         private string GetAssemblyPath(string name)
         {
-            DynamicTypeService typeResolver = (DynamicTypeService)GetService(typeof(DynamicTypeService));
             var dirs = GetReferenceDirectories();
             AssemblyName asmName = new AssemblyName(name);
 
             foreach (var rootDir in dirs)
             {
 
-                foreach(var dir in  rootDir.ToEnumerable().Concat(Directory.GetDirectories(rootDir,"*.*", SearchOption.AllDirectories)))
+                if (Directory.Exists(rootDir))
                 {
-                    string path = Path.Combine(dir, asmName.Name + ".dll");
-                    if (File.Exists(path))
+                    foreach (
+                        var dir in
+                            rootDir.ToEnumerable()
+                                   .Concat(Directory.GetDirectories(rootDir, "*.*", SearchOption.AllDirectories)))
                     {
-                        var foundName = AssemblyName.GetAssemblyName(path);
-
-                        if (IsNameCompatible(foundName, asmName))
+                        string path = Path.Combine(dir, asmName.Name + ".dll");
+                        if (File.Exists(path))
                         {
-                            return path;
+                            var foundName = AssemblyName.GetAssemblyName(path);
+
+                            if (IsNameCompatible(foundName, asmName))
+                            {
+                                return path;
+                            }
                         }
                     }
                 }
@@ -170,15 +173,10 @@ namespace SergejDerjabkin.VSAssemblyResolver
         }
 
 
-        private Assembly FindLoadedAssembly(AssemblyName asmName)
-        {
-            return AppDomain.CurrentDomain.GetAssemblies().FirstOrDefault(a => IsNameCompatible(a.GetName(), asmName));
-        }
-
 
         private static bool resolving;
 
-        System.Reflection.Assembly CurrentDomain_AssemblyResolve(object sender, ResolveEventArgs args)
+        Assembly CurrentDomain_AssemblyResolve(object sender, ResolveEventArgs args)
         {
             Trace.TraceInformation("Resolving assembly {0}", args.Name);
             if (resolving)
@@ -194,9 +192,8 @@ namespace SergejDerjabkin.VSAssemblyResolver
                 {
                     return domain.Load(asmName);
                 }
-                catch (FileLoadException ex)
+                catch (FileLoadException)
                 {
-                    string a = ex.ToString();
                 }
 
                 catch (FileNotFoundException)
@@ -229,11 +226,11 @@ namespace SergejDerjabkin.VSAssemblyResolver
             IVsUIShell uiShell = (IVsUIShell)GetService(typeof(SVsUIShell));
             Guid clsid = Guid.Empty;
             int result;
-            Microsoft.VisualStudio.ErrorHandler.ThrowOnFailure(uiShell.ShowMessageBox(
+            ErrorHandler.ThrowOnFailure(uiShell.ShowMessageBox(
                        0,
                        ref clsid,
                        "VSAssemblyResolver",
-                       string.Format(CultureInfo.CurrentCulture, "Inside {0}.MenuItemCallback()", this.ToString()),
+                       string.Format(CultureInfo.CurrentCulture, "Inside {0}.MenuItemCallback()", this),
                        string.Empty,
                        0,
                        OLEMSGBUTTON.OLEMSGBUTTON_OK,
