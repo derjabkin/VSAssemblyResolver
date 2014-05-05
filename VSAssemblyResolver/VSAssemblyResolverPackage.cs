@@ -42,7 +42,7 @@ namespace SergejDerjabkin.VSAssemblyResolver
         private Guid outputPaneGuid = new Guid("5540917A-D013-4C31-8F80-94F3B783FE88");
         private const string outputPaneTitle = "VSAssemblyResolver";
         private IVsOutputWindowPane outputPane;
-
+        private readonly HashSet<string> missingAssembliesCache = new HashSet<string>();
         /// <summary>
         /// Default constructor of the package.
         /// Inside this method you can place any initialization code that does not require 
@@ -109,6 +109,37 @@ namespace SergejDerjabkin.VSAssemblyResolver
                 MenuCommand menuItem = new MenuCommand(MenuItemCallback, menuCommandID);
                 mcs.AddCommand(menuItem);
             }
+
+            var dte = GetDte();
+            dte.Events.SolutionEvents.Opened += () =>
+            {
+                foreach (Project project in dte.Solution.Projects)
+                    WireProjectEvents(project);
+
+                InvalidateCache();
+            };
+            dte.Events.SolutionEvents.ProjectAdded += WireProjectEvents;
+        }
+
+        private void WireProjectEvents(Project project)
+        {
+            VSProject vsProject = project.Object as VSProject;
+
+            if (vsProject != null)
+            {
+                vsProject.Events.ReferencesEvents.ReferenceAdded += r => InvalidateCache();
+                vsProject.Events.ReferencesEvents.ReferenceChanged += r => InvalidateCache();
+            }
+
+        }
+
+
+        private void InvalidateCache()
+        {
+            lock (missingAssembliesCache)
+            {
+                missingAssembliesCache.Clear();
+            }
         }
 
         Assembly CurrentDomain_ReflectionOnlyAssemblyResolve(object sender, ResolveEventArgs args)
@@ -117,13 +148,14 @@ namespace SergejDerjabkin.VSAssemblyResolver
             if (!string.IsNullOrWhiteSpace(path))
                 return Assembly.ReflectionOnlyLoadFrom(path);
 
+            AddMissingAssembly(args);
             return null;
         }
 
 
         private IEnumerable<string> GetReferenceDirectoriesEnum()
         {
-            DTE dte = (DTE)GetService(typeof(DTE));
+            DTE dte = GetDte();
             foreach (Project project in dte.Solution.Projects)
             {
                 var vsp = project.Object as VSProject;
@@ -138,6 +170,12 @@ namespace SergejDerjabkin.VSAssemblyResolver
                     }
                 }
             }
+        }
+
+        private DTE GetDte()
+        {
+            DTE dte = (DTE)GetService(typeof(DTE));
+            return dte;
         }
 
         private string[] GetReferenceDirectories()
@@ -206,10 +244,25 @@ namespace SergejDerjabkin.VSAssemblyResolver
 
 
 
+
+        private bool IsMissingAssembly(string name)
+        {
+            if (missingAssembliesCache.Contains(name))
+            {
+                WriteOutput("[CACHE] Missing assembly {0}", name);
+                return true;
+            }
+            else
+                return false;
+        }
         private static bool resolving;
 
         Assembly CurrentDomain_AssemblyResolve(object sender, ResolveEventArgs args)
         {
+
+            if (IsMissingAssembly(args.Name))
+                return null;
+
             WriteOutput("Resolving assembly {0}", args.Name);
             
             if (resolving) return null;
@@ -238,11 +291,21 @@ namespace SergejDerjabkin.VSAssemblyResolver
                     return typeResolver.CreateDynamicAssembly(path);
 
 
+                AddMissingAssembly(args);
                 return null;
             }
             finally
             {
                 resolving = false;
+            }
+        }
+
+        private void AddMissingAssembly(ResolveEventArgs args)
+        {
+            lock (missingAssembliesCache)
+            {
+                if (!missingAssembliesCache.Contains(args.Name))
+                    missingAssembliesCache.Add(args.Name);
             }
         }
         #endregion
