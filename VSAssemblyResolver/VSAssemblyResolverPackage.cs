@@ -39,6 +39,10 @@ namespace SergejDerjabkin.VSAssemblyResolver
     [Guid(GuidList.guidVSAssemblyResolverPkgString)]
     public sealed class VSAssemblyResolverPackage : Package
     {
+        private Guid outputPaneGuid = new Guid("5540917A-D013-4C31-8F80-94F3B783FE88");
+        private const string outputPaneTitle = "VSAssemblyResolver";
+        private IVsOutputWindowPane outputPane;
+
         /// <summary>
         /// Default constructor of the package.
         /// Inside this method you can place any initialization code that does not require 
@@ -54,6 +58,32 @@ namespace SergejDerjabkin.VSAssemblyResolver
 
 
 
+        private IVsOutputWindowPane OutputPane
+        {
+            get
+            {
+                if (outputPane == null)
+                {
+                    IVsOutputWindow window = GetGlobalService(typeof(SVsOutputWindow)) as IVsOutputWindow;
+                    if (window != null)
+                    {
+                        window.CreatePane(ref outputPaneGuid, outputPaneTitle, 1, 1);
+                        window.GetPane(ref outputPaneGuid, out outputPane);
+                    }
+                }
+                return outputPane;
+            }
+        }
+
+
+        private void WriteOutput(string format, params object[] args)
+        {
+            if (OutputPane != null)
+            {
+                OutputPane.OutputString(string.Format(CultureInfo.CurrentCulture, format, args));
+                OutputPane.OutputString("\r\n");
+            }
+        }
         /////////////////////////////////////////////////////////////////////////////
         // Overridden Package Implementation
         #region Package Members
@@ -140,8 +170,10 @@ namespace SergejDerjabkin.VSAssemblyResolver
             foreach (var rootDir in dirs)
             {
 
+
                 if (Directory.Exists(rootDir))
                 {
+                    WriteOutput("Looking for {0} in {1}", name, rootDir);
                     foreach (
                         var dir in
                             rootDir.ToEnumerable()
@@ -178,9 +210,9 @@ namespace SergejDerjabkin.VSAssemblyResolver
 
         Assembly CurrentDomain_AssemblyResolve(object sender, ResolveEventArgs args)
         {
-            Trace.TraceInformation("Resolving assembly {0}", args.Name);
-            if (resolving)
-                return null;
+            WriteOutput("Resolving assembly {0}", args.Name);
+            
+            if (resolving) return null;
 
             resolving = true;
             try

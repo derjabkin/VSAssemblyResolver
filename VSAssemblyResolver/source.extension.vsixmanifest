@@ -1,7 +1,7 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <PackageManifest Version="2.0.0" xmlns="http://schemas.microsoft.com/developer/vsx-schema/2011" xmlns:d="http://schemas.microsoft.com/developer/vsx-schema-design/2011">
   <Metadata>
-    <Identity Id="53379d2c-e289-4f71-b241-114880543064" Version="0.6" Language="en-US" Publisher="Sergej Derjabkin" />
+    <Identity Id="53379d2c-e289-4f71-b241-114880543064" Version="0.9" Language="en-US" Publisher="Sergej Derjabkin" />
     <DisplayName>VSAssemblyResolver</DisplayName>
     <Description xml:space="preserve">
 
@@ -11,7 +11,7 @@ The Software is provided "as is" without warranty of any kind, either express or
 </Description>
   </Metadata>
   <Installation InstalledByMsi="false">
-	<InstallationTarget Id="Microsoft.VisualStudio.Pro" Version="11.0" />
+    <InstallationTarget Id="Microsoft.VisualStudio.Pro" Version="11.0" />
     <InstallationTarget Version="[12.0,13.0)" Id="Microsoft.VisualStudio.Pro" />
   </Installation>
   <Dependencies>
