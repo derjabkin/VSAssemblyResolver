@@ -13,6 +13,11 @@ using Microsoft.VisualStudio.Shell.Interop;
 using Microsoft.VisualStudio.Shell;
 using EnvDTE;
 using VSLangProj;
+using Microsoft.VisualStudio.Toolbox;
+using System.Drawing.Design;
+using System.Runtime.Serialization;
+using System.ComponentModel;
+using System.Runtime.Versioning;
 
 namespace SergejDerjabkin.VSAssemblyResolver
 {
@@ -182,6 +187,9 @@ namespace SergejDerjabkin.VSAssemblyResolver
         {
             DTE dte = (DTE)GetService(typeof(DTE));
 
+            if (string.IsNullOrEmpty(dte.Solution.FileName))
+                return new string[0];
+
             var dirs =
                 new string[] { Path.Combine(Path.GetDirectoryName(dte.Solution.FileName), "packages") }
                     .Concat(GetReferenceDirectoriesEnum())
@@ -264,7 +272,7 @@ namespace SergejDerjabkin.VSAssemblyResolver
                 return null;
 
             WriteOutput("Resolving assembly {0}", args.Name);
-            
+
             if (resolving) return null;
 
             resolving = true;
@@ -300,6 +308,19 @@ namespace SergejDerjabkin.VSAssemblyResolver
             }
         }
 
+
+        private Assembly LoadReflectionAssemblySafe(string fileName)
+        {
+            try
+            {
+                return Assembly.ReflectionOnlyLoadFrom(fileName);
+            }
+            catch (BadImageFormatException) { }
+            catch (FileLoadException) { }
+            catch (FileNotFoundException) { }
+
+            return null;
+        }
         private void AddMissingAssembly(ResolveEventArgs args)
         {
             lock (missingAssembliesCache)
@@ -310,6 +331,20 @@ namespace SergejDerjabkin.VSAssemblyResolver
         }
         #endregion
 
+
+        private bool IsToolboxItem(Type type)
+        {
+            
+            var dxToolboxAttribute = type.GetCustomAttributesData().FirstOrDefault(d => d.AttributeType.Name == "DXToolboxItemAttribute");
+            if (dxToolboxAttribute != null)
+            {
+
+                var b = dxToolboxAttribute.ConstructorArguments[0].Value as bool?;
+                return b == null || b.Value;
+            }
+
+            return false;
+        }
         /// <summary>
         /// This function is the callback used to execute a command when the a menu item is clicked.
         /// See the Initialize method to see how the menu item is associated to this function using
@@ -317,6 +352,42 @@ namespace SergejDerjabkin.VSAssemblyResolver
         /// </summary>
         private void MenuItemCallback(object sender, EventArgs e)
         {
+            DynamicTypeService typeResolver = (DynamicTypeService)GetService(typeof(DynamicTypeService));
+            IVsToolboxService2 toolBoxService = GetService(typeof(IToolboxService)) as IVsToolboxService2;
+
+            if (toolBoxService != null)
+            {
+                List<Tuple<string, ToolboxItem, IEnumerable<FrameworkName>, Guid>> items = new List<Tuple<string, ToolboxItem, IEnumerable<FrameworkName>, Guid>>();
+                HashSet<string> processedAssemblies = new HashSet<string>();
+                foreach (var directory in GetReferenceDirectories())
+                {
+                    foreach (string fileName in Directory.GetFiles(directory, "*.dll", SearchOption.AllDirectories))
+                    {
+                        var assembly = typeResolver.CreateDynamicAssembly(fileName);
+                        if (assembly != null && !processedAssemblies.Contains(assembly.FullName))
+                        {
+                            processedAssemblies.Add(assembly.FullName);
+                            try
+                            {
+                                foreach (Type type in assembly.GetTypes())
+                                {
+                                    if (!type.IsAbstract && !type.IsGenericTypeDefinition && IsToolboxItem(type))
+                                    {
+                                        if (typeof(IComponent).IsAssignableFrom(type))
+                                        {
+                                            items.Add(new Tuple<string, ToolboxItem, IEnumerable<FrameworkName>, Guid>(
+                                                "VSAssemblyResolver", new ResolverToolboxItem(type), null, Guid.Empty));
+                                        }
+                                    }
+                                }
+                            }
+                            catch (ReflectionTypeLoadException) { }
+                            catch (TypeLoadException) { }
+                        }
+                    }
+                }
+                toolBoxService.AddToolboxItems(items, null);
+            }
             // Show a Message Box to prove we were here
             IVsUIShell uiShell = (IVsUIShell)GetService(typeof(SVsUIShell));
             Guid clsid = Guid.Empty;
@@ -335,5 +406,19 @@ namespace SergejDerjabkin.VSAssemblyResolver
                        out result));
         }
 
+    }
+
+    public class ResolverToolboxItem : ToolboxItem
+    {
+        public ResolverToolboxItem(Type toolType)
+            : base(toolType)
+        {
+            
+        }
+
+        protected ResolverToolboxItem(SerializationInfo info, StreamingContext context)
+        {
+            Deserialize(info, context);
+        }
     }
 }
