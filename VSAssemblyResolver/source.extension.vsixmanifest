@@ -11,7 +11,6 @@ The Software is provided "as is" without warranty of any kind, either express or
 </Description>
   </Metadata>
   <Installation InstalledByMsi="false">
-    <InstallationTarget Id="Microsoft.VisualStudio.Pro" Version="11.0" />
     <InstallationTarget Version="[12.0,13.0)" Id="Microsoft.VisualStudio.Pro" />
   </Installation>
   <Dependencies>
