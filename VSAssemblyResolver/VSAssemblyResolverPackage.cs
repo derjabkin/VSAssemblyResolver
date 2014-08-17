@@ -334,8 +334,9 @@ namespace SergejDerjabkin.VSAssemblyResolver
 
         private bool IsToolboxItem(Type type)
         {
-            
-            var dxToolboxAttribute = type.GetCustomAttributesData().FirstOrDefault(d => d.AttributeType.Name == "DXToolboxItemAttribute");
+
+            var dxToolboxAttribute = type.GetCustomAttributesData().FirstOrDefault(d => 
+                d.AttributeType.Name == "DXToolboxItemAttribute" || d.AttributeType.Name == "ToolboxItemAttribute");
             if (dxToolboxAttribute != null)
             {
 
