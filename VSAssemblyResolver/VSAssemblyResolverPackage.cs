@@ -372,6 +372,7 @@ namespace SergejDerjabkin.VSAssemblyResolver
                             {
                                 foreach (Type type in assembly.GetTypes())
                                 {
+
                                     if (!type.IsAbstract && !type.IsGenericTypeDefinition && IsToolboxItem(type))
                                     {
                                         if (typeof(IComponent).IsAssignableFrom(type))
@@ -409,6 +410,7 @@ namespace SergejDerjabkin.VSAssemblyResolver
 
     }
 
+    [Serializable]
     public class ResolverToolboxItem : ToolboxItem
     {
         public ResolverToolboxItem(Type toolType)
