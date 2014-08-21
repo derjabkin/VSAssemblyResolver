@@ -48,6 +48,8 @@ namespace SergejDerjabkin.VSAssemblyResolver
         private const string outputPaneTitle = "VSAssemblyResolver";
         private IVsOutputWindowPane outputPane;
         private readonly HashSet<string> missingAssembliesCache = new HashSet<string>();
+        private bool solutionOpened;
+
         /// <summary>
         /// Default constructor of the package.
         /// Inside this method you can place any initialization code that does not require 
@@ -122,10 +124,58 @@ namespace SergejDerjabkin.VSAssemblyResolver
                     WireProjectEvents(project);
 
                 InvalidateCache();
+                solutionOpened = true;
             };
             dte.Events.SolutionEvents.ProjectAdded += WireProjectEvents;
+            RegisterSolutionServices();
         }
 
+        private void RegisterSolutionServices()
+        {
+            string packageDirectory = GetPackagesDirectory(GetDte());
+            var servicesDirectories = Directory.GetDirectories(packageDirectory, "*VSARService*");
+            string[] files = servicesDirectories.SelectMany(sd => Directory.GetFiles(sd, "*.dll", SearchOption.AllDirectories)).ToArray();
+
+            foreach (var fileName in files)
+            {
+                Assembly assembly = null;
+
+                try
+                {
+                    assembly = Assembly.ReflectionOnlyLoadFrom(fileName);
+                }
+                catch (BadImageFormatException) { }
+                catch (TypeLoadException) { }
+                catch (ReflectionTypeLoadException) { }
+
+                if (assembly != null && GetRegistratorType(assembly) != null)
+                {
+                    assembly = Assembly.LoadFile(fileName);
+                    Type registratorType = GetRegistratorType(assembly);
+                    var method = registratorType.GetMethod("RegisterServices", BindingFlags.Static | BindingFlags.Public);
+                    if (method != null)
+                    {
+                        method.Invoke(null, new object[] { this });
+                    }
+                }
+            }
+        }
+
+        private static Type GetRegistratorType(Assembly assembly)
+        {
+            try
+            {
+                return assembly.GetTypes().FirstOrDefault(a => a.Name == "ServiceRegistrator");
+            }
+            catch (ReflectionTypeLoadException)
+            {
+                return null;
+            }
+            catch (TypeLoadException)
+            {
+                return null;
+            }
+        }
         private void WireProjectEvents(Project project)
         {
             VSProject vsProject = project.Object as VSProject;
@@ -135,7 +185,6 @@ namespace SergejDerjabkin.VSAssemblyResolver
                 vsProject.Events.ReferencesEvents.ReferenceAdded += r => InvalidateCache();
                 vsProject.Events.ReferencesEvents.ReferenceChanged += r => InvalidateCache();
             }
-
         }
 
 
@@ -160,6 +209,9 @@ namespace SergejDerjabkin.VSAssemblyResolver
 
         private IEnumerable<string> GetReferenceDirectoriesEnum()
         {
+            if (!solutionOpened)
+                yield break;
+
             DTE dte = GetDte();
             foreach (Project project in dte.Solution.Projects)
             {
@@ -179,19 +231,18 @@ namespace SergejDerjabkin.VSAssemblyResolver
 
         private DTE GetDte()
         {
-            DTE dte = (DTE)GetService(typeof(DTE));
-            return dte;
+            return (DTE)GetService(typeof(DTE));
         }
 
         private string[] GetReferenceDirectories()
         {
-            DTE dte = (DTE)GetService(typeof(DTE));
+            DTE dte = GetDte();
 
-            if (string.IsNullOrEmpty(dte.Solution.FileName))
+            if (dte == null || dte.Solution == null || string.IsNullOrEmpty(dte.Solution.FileName))
                 return new string[0];
 
             var dirs =
-                new string[] { Path.Combine(Path.GetDirectoryName(dte.Solution.FileName), "packages") }
+                new string[] { GetPackagesDirectory(dte) }
                     .Concat(GetReferenceDirectoriesEnum())
                     .Select(d => Path.GetFullPath(d))
                     .OrderBy(s => s.Length)
@@ -205,6 +256,11 @@ namespace SergejDerjabkin.VSAssemblyResolver
             }
 
             return dirs.ToArray();
+        }
+
+        private static string GetPackagesDirectory(DTE dte)
+        {
+            return Path.Combine(Path.GetDirectoryName(dte.Solution.FileName), "packages");
         }
 
 
@@ -335,7 +391,7 @@ namespace SergejDerjabkin.VSAssemblyResolver
         private bool IsToolboxItem(Type type)
         {
 
-            var dxToolboxAttribute = type.GetCustomAttributesData().FirstOrDefault(d => 
+            var dxToolboxAttribute = type.GetCustomAttributesData().FirstOrDefault(d =>
                 d.AttributeType.Name == "DXToolboxItemAttribute" || d.AttributeType.Name == "ToolboxItemAttribute");
             if (dxToolboxAttribute != null)
             {
@@ -416,7 +472,7 @@ namespace SergejDerjabkin.VSAssemblyResolver
         public ResolverToolboxItem(Type toolType)
             : base(toolType)
         {
-            
+
         }
 
         protected ResolverToolboxItem(SerializationInfo info, StreamingContext context)
