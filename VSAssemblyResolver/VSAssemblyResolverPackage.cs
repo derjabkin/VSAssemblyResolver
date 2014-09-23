@@ -262,6 +262,15 @@ namespace SergejDerjabkin.VSAssemblyResolver
 
         private static string GetPackagesDirectory(DTE dte)
         {
+            if (dte == null)
+                throw new ArgumentNullException("dte");
+
+            if (dte.Solution == null)
+                return null;
+
+            if (string.IsNullOrWhiteSpace(dte.Solution.FileName))
+                return null;
+
             return Path.Combine(Path.GetDirectoryName(dte.Solution.FileName), "packages");
         }
 
