@@ -133,6 +133,8 @@ namespace SergejDerjabkin.VSAssemblyResolver
         private void RegisterSolutionServices()
         {
             string packageDirectory = GetPackagesDirectory(GetDte());
+            if (!Directory.Exists(packageDirectory)) return;
+
             var servicesDirectories = Directory.GetDirectories(packageDirectory, "*VSARService*");
             string[] files = servicesDirectories.SelectMany(sd => Directory.GetFiles(sd, "*.dll", SearchOption.AllDirectories)).ToArray();
 
