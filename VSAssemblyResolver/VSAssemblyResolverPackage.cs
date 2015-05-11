@@ -157,7 +157,14 @@ namespace SergejDerjabkin.VSAssemblyResolver
                     var method = registratorType.GetMethod("RegisterServices", BindingFlags.Static | BindingFlags.Public);
                     if (method != null)
                     {
-                        method.Invoke(null, new object[] { this });
+                        try
+                        {
+                            method.Invoke(null, new object[] { this });
+                        }
+                        catch (Exception ex)
+                        {
+                            WriteOutput("ERROR in {0}.RegisterServices: \r\n{1}", registratorType.FullName, ex);
+                        }
                     }
                 }
             }
