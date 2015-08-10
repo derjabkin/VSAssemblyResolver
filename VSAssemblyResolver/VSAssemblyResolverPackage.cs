@@ -51,6 +51,8 @@ namespace SergejDerjabkin.VSAssemblyResolver
         private IVsOutputWindowPane outputPane;
         private readonly HashSet<string> missingAssembliesCache = new HashSet<string>();
         private bool solutionOpened;
+        private BufferBlock<string> outputBuffer;
+
 
         /// <summary>
         /// Default constructor of the package.
@@ -63,8 +65,6 @@ namespace SergejDerjabkin.VSAssemblyResolver
         {
             Debug.WriteLine(string.Format(CultureInfo.CurrentCulture, "Entering constructor for: {0}", this.ToString()));
         }
-
-
 
 
         private IVsOutputWindowPane OutputPane
@@ -84,20 +84,24 @@ namespace SergejDerjabkin.VSAssemblyResolver
             }
         }
 
-        private async Task WriteOutputAsync(ISourceBlock<string> source)
-        {
-
-        }
-
-
         private void WriteOutput(string format, params object[] args)
         {
-            if (OutputPane != null)
+            outputBuffer.Post(string.Format(CultureInfo.CurrentCulture, format, args));
+        }
+
+        private async System.Threading.Tasks.Task WriteOutputAsync(ISourceBlock<string> source)
+        {
+            while (await source.OutputAvailableAsync())
             {
-                OutputPane.OutputStringThreadSafe(string.Format(CultureInfo.CurrentCulture, format, args));
-                OutputPane.OutputStringThreadSafe("\r\n");
+                string data = source.Receive();
+                if (OutputPane != null)
+                {
+                    OutputPane.OutputStringThreadSafe(data);
+                    OutputPane.OutputStringThreadSafe("\r\n");
+                }
             }
         }
+
         /////////////////////////////////////////////////////////////////////////////
         // Overridden Package Implementation
         #region Package Members
@@ -113,6 +117,10 @@ namespace SergejDerjabkin.VSAssemblyResolver
 
             Debug.WriteLine(string.Format(CultureInfo.CurrentCulture, "Entering Initialize() of: {0}", this.ToString()));
             base.Initialize();
+
+            // Create output buffer ans start consumer.
+            outputBuffer = new BufferBlock<string>();
+            var consumer = WriteOutputAsync(outputBuffer);
 
             // Add our command handlers for menu (commands must exist in the .vsct file)
             OleMenuCommandService mcs = GetService(typeof(IMenuCommandService)) as OleMenuCommandService;
