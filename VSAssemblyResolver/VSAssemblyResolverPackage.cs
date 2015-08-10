@@ -18,6 +18,8 @@ using System.Drawing.Design;
 using System.Runtime.Serialization;
 using System.ComponentModel;
 using System.Runtime.Versioning;
+using System.Threading.Tasks;
+using System.Threading.Tasks.Dataflow;
 
 namespace SergejDerjabkin.VSAssemblyResolver
 {
@@ -82,13 +84,18 @@ namespace SergejDerjabkin.VSAssemblyResolver
             }
         }
 
+        private async Task WriteOutputAsync(ISourceBlock<string> source)
+        {
+
+        }
+
 
         private void WriteOutput(string format, params object[] args)
         {
             if (OutputPane != null)
             {
-                OutputPane.OutputString(string.Format(CultureInfo.CurrentCulture, format, args));
-                OutputPane.OutputString("\r\n");
+                OutputPane.OutputStringThreadSafe(string.Format(CultureInfo.CurrentCulture, format, args));
+                OutputPane.OutputStringThreadSafe("\r\n");
             }
         }
         /////////////////////////////////////////////////////////////////////////////
