@@ -120,7 +120,7 @@ namespace SergejDerjabkin.VSAssemblyResolver
 
             // Create output buffer ans start consumer.
             outputBuffer = new BufferBlock<string>();
-            var consumer = WriteOutputAsync(outputBuffer);
+            WriteOutputAsync(outputBuffer);
 
             // Add our command handlers for menu (commands must exist in the .vsct file)
             OleMenuCommandService mcs = GetService(typeof(IMenuCommandService)) as OleMenuCommandService;
