@@ -354,6 +354,21 @@ namespace SergejDerjabkin.VSAssemblyResolver
         }
         private static bool resolving;
 
+
+        private DynamicTypeService typeResolver;
+        private DynamicTypeService TypeResolver
+        {
+            get
+            {
+                if(typeResolver == null)
+                {
+                    typeResolver = (DynamicTypeService)GetService(typeof(DynamicTypeService));
+                }
+
+                return typeResolver;
+            }
+        }
+        
         Assembly CurrentDomain_AssemblyResolve(object sender, ResolveEventArgs args)
         {
 
@@ -382,10 +397,9 @@ namespace SergejDerjabkin.VSAssemblyResolver
                 {
                 }
 
-                DynamicTypeService typeResolver = (DynamicTypeService)GetService(typeof(DynamicTypeService));
                 string path = GetAssemblyPath(args.Name);
                 if (!string.IsNullOrWhiteSpace(path))
-                    return typeResolver.CreateDynamicAssembly(path);
+                    return TypeResolver.CreateDynamicAssembly(path);
 
 
                 AddMissingAssembly(args);
