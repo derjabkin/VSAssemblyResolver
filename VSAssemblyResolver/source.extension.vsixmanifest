@@ -1,11 +1,9 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <PackageManifest Version="2.0.0" xmlns="http://schemas.microsoft.com/developer/vsx-schema/2011" xmlns:d="http://schemas.microsoft.com/developer/vsx-schema-design/2011">
   <Metadata>
-    <Identity Id="53379d2c-e289-4f71-b241-114880543064" Version="0.22" Language="en-US" Publisher="Sergej Derjabkin" />
+    <Identity Id="53379d2c-e289-4f71-b241-114880543064" Version="0.23" Language="en-US" Publisher="Sergej Derjabkin" />
     <DisplayName>VSAssemblyResolver</DisplayName>
-    <Description xml:space="preserve">
-
-Design Time assemblies have to be installed into the GAC or into the PublicAssemblies folder. This restriction make difficult to handle multiple versions of a component or NuGet-based reference management. This small extension allows Visual Studio to locate assemblies in all reference folders of a project.
+    <Description xml:space="preserve">Resolves assemblies paths at design time
 
 The Software is provided "as is" without warranty of any kind, either express or implied, including without limitation any implied warranties of condition, uninterrupted use, merchantability, fitness for a particular purpose, or non-infringement
 </Description>

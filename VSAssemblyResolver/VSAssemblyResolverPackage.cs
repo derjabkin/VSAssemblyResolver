@@ -18,8 +18,8 @@ using System.Drawing.Design;
 using System.Runtime.Serialization;
 using System.ComponentModel;
 using System.Runtime.Versioning;
-using System.Threading.Tasks;
 using System.Threading.Tasks.Dataflow;
+using System.Drawing;
 
 namespace SergejDerjabkin.VSAssemblyResolver
 {
@@ -459,39 +459,48 @@ namespace SergejDerjabkin.VSAssemblyResolver
             DynamicTypeService typeResolver = (DynamicTypeService)GetService(typeof(DynamicTypeService));
             IVsToolboxService2 toolBoxService = GetService(typeof(IToolboxService)) as IVsToolboxService2;
 
+            
             if (toolBoxService != null)
             {
-                List<Tuple<string, ToolboxItem, IEnumerable<FrameworkName>, Guid>> items = new List<Tuple<string, ToolboxItem, IEnumerable<FrameworkName>, Guid>>();
-                HashSet<string> processedAssemblies = new HashSet<string>();
-                foreach (var directory in GetReferenceDirectories())
+                try
                 {
-                    foreach (string fileName in Directory.GetFiles(directory, "*.dll", SearchOption.AllDirectories))
+                    IList<Tuple<string, ToolboxItem, IEnumerable<FrameworkName>, Guid>> items = new List<Tuple<string, ToolboxItem, IEnumerable<FrameworkName>, Guid>>();
+                    HashSet<string> processedAssemblies = new HashSet<string>();
+                    foreach (var directory in GetReferenceDirectories())
                     {
-                        var assembly = typeResolver.CreateDynamicAssembly(fileName);
-                        if (assembly != null && !processedAssemblies.Contains(assembly.FullName))
+                        foreach (string fileName in Directory.GetFiles(directory, "*.dll", SearchOption.AllDirectories))
                         {
-                            processedAssemblies.Add(assembly.FullName);
-                            try
+                            var assembly = typeResolver.CreateDynamicAssembly(fileName);
+                            if (assembly != null && !processedAssemblies.Contains(assembly.FullName))
                             {
-                                foreach (Type type in assembly.GetTypes())
+                                processedAssemblies.Add(assembly.FullName);
+                                try
                                 {
-
-                                    if (!type.IsAbstract && !type.IsGenericTypeDefinition && IsToolboxItem(type))
+                                    foreach (Type type in assembly.GetTypes())
                                     {
-                                        if (typeof(IComponent).IsAssignableFrom(type))
+
+                                        if (!type.IsAbstract && !type.IsGenericTypeDefinition && IsToolboxItem(type))
                                         {
-                                            items.Add(new Tuple<string, ToolboxItem, IEnumerable<FrameworkName>, Guid>(
-                                                "VSAssemblyResolver", new ResolverToolboxItem(type), null, Guid.Empty));
+                                            if (typeof(IComponent).IsAssignableFrom(type))
+                                            {
+                                                items.Add(new Tuple<string, ToolboxItem, IEnumerable<FrameworkName>, Guid>(
+                                                    "VSAssemblyResolver", new ResolverToolboxItem(type), null, Guid.Empty));
+                                            }
                                         }
                                     }
                                 }
+                                catch (ReflectionTypeLoadException) { }
+                                catch (TypeLoadException) { }
+                                catch (FileNotFoundException) { }
                             }
-                            catch (ReflectionTypeLoadException) { }
-                            catch (TypeLoadException) { }
                         }
                     }
+                    toolBoxService.AddToolboxItems(items, null);
                 }
-                toolBoxService.AddToolboxItems(items, null);
+                catch(Exception ex)
+                {
+                    Debug.WriteLine(ex.ToString());
+                }
             }
             // Show a Message Box to prove we were here
             IVsUIShell uiShell = (IVsUIShell)GetService(typeof(SVsUIShell));
@@ -511,6 +520,7 @@ namespace SergejDerjabkin.VSAssemblyResolver
                        out result));
         }
 
+        
     }
 
     [Serializable]
@@ -519,7 +529,19 @@ namespace SergejDerjabkin.VSAssemblyResolver
         public ResolverToolboxItem(Type toolType)
             : base(toolType)
         {
+            this.Bitmap = GetImage(toolType);
+        }
 
+        private static Bitmap GetImage(Type toolType)
+        {
+            var tb = (ToolboxBitmapAttribute)toolType.GetCustomAttributes(typeof(ToolboxBitmapAttribute), false).FirstOrDefault();
+            if (tb != null)
+            {
+                return (Bitmap)tb.GetImage(toolType);
+                
+            }
+
+            return null;
         }
 
         protected ResolverToolboxItem(SerializationInfo info, StreamingContext context)
