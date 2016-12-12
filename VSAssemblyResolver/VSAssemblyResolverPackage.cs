@@ -253,9 +253,12 @@ namespace SergejDerjabkin.VSAssemblyResolver
             }
         }
 
+
+
+        private DTE dteCache;
         private DTE GetDte()
         {
-            return (DTE)GetService(typeof(DTE));
+            return dteCache ?? (dteCache = (DTE)GetService(typeof(DTE)));
         }
 
         private string[] GetReferenceDirectories()
