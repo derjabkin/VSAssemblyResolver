@@ -112,9 +112,7 @@ namespace SergejDerjabkin.VSAssemblyResolver
         /// </summary>
         protected override void Initialize()
         {
-            AppDomain.CurrentDomain.AssemblyResolve += CurrentDomain_AssemblyResolve;
-            AppDomain.CurrentDomain.ReflectionOnlyAssemblyResolve += CurrentDomain_ReflectionOnlyAssemblyResolve;
-
+            
             Debug.WriteLine(string.Format(CultureInfo.CurrentCulture, "Entering Initialize() of: {0}", this.ToString()));
             base.Initialize();
 
@@ -143,6 +141,10 @@ namespace SergejDerjabkin.VSAssemblyResolver
             };
             dte.Events.SolutionEvents.ProjectAdded += WireProjectEvents;
             RegisterSolutionServices();
+
+            AppDomain.CurrentDomain.AssemblyResolve += CurrentDomain_AssemblyResolve;
+            AppDomain.CurrentDomain.ReflectionOnlyAssemblyResolve += CurrentDomain_ReflectionOnlyAssemblyResolve;
+
         }
 
         private void RegisterSolutionServices()
