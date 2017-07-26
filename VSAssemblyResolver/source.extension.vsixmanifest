@@ -1,8 +1,8 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <PackageManifest Version="2.0.0" xmlns="http://schemas.microsoft.com/developer/vsx-schema/2011" xmlns:d="http://schemas.microsoft.com/developer/vsx-schema-design/2011">
   <Metadata>
-    <Identity Id="53379d2c-e289-4f71-b241-114880543064" Version="0.27" Language="en-US" Publisher="Sergej Derjabkin" />
-    <DisplayName>VSAssemblyResolver</DisplayName>
+    <Identity Id="51B2E594-B2E7-405A-9943-50C758CCEBA7" Version="0.30" Language="en-US" Publisher="Sergej Derjabkin" />
+    <DisplayName>VSAssemblyResolver 2017</DisplayName>
     <Description xml:space="preserve">Resolves assemblies paths at design time
 
 The Software is provided "as is" without warranty of any kind, either express or implied, including without limitation any implied warranties of condition, uninterrupted use, merchantability, fitness for a particular purpose, or non-infringement
