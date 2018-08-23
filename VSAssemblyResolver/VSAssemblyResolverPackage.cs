@@ -20,6 +20,7 @@ using System.ComponentModel;
 using System.Runtime.Versioning;
 using System.Threading.Tasks.Dataflow;
 using System.Drawing;
+using System.Threading.Tasks;
 
 namespace SergejDerjabkin.VSAssemblyResolver
 {
@@ -263,7 +264,8 @@ namespace SergejDerjabkin.VSAssemblyResolver
             return dteCache ?? (dteCache = (DTE)GetService(typeof(DTE)));
         }
 
-        private string[] GetReferenceDirectories()
+
+        private string[] GetReferenceDirectoriesCore()
         {
             DTE dte = GetDte();
 
@@ -286,6 +288,17 @@ namespace SergejDerjabkin.VSAssemblyResolver
 
             return dirs.ToArray();
         }
+
+		private string[] GetReferenceDirectories()
+		{
+			var task = System.Threading.Tasks.Task.Run<string[]>(() => GetReferenceDirectoriesCore());
+
+            //This is a very dirty workaround for a deadlock that occurs when accessing solution object
+			if (task.Wait(1000))
+				return task.Result;
+
+			return new string[0];
+		}
 
         private static string GetPackagesDirectory(DTE dte)
         {
@@ -461,7 +474,7 @@ namespace SergejDerjabkin.VSAssemblyResolver
         /// </summary>
         private void MenuItemCallback(object sender, EventArgs e)
         {
-            DynamicTypeService typeResolver = (DynamicTypeService)GetService(typeof(DynamicTypeService));
+            DynamicTypeService typeResolverService = (DynamicTypeService)GetService(typeof(DynamicTypeService));
             IVsToolboxService2 toolBoxService = GetService(typeof(IToolboxService)) as IVsToolboxService2;
 
             
@@ -475,7 +488,7 @@ namespace SergejDerjabkin.VSAssemblyResolver
                     {
                         foreach (string fileName in Directory.GetFiles(directory, "*.dll", SearchOption.AllDirectories))
                         {
-                            var assembly = typeResolver.CreateDynamicAssembly(fileName);
+                            var assembly = typeResolverService.CreateDynamicAssembly(fileName);
                             if (assembly != null && !processedAssemblies.Contains(assembly.FullName))
                             {
                                 processedAssemblies.Add(assembly.FullName);

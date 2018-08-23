@@ -8,3 +8,4 @@ Build/Temp
 /*.bak
 TestResults
 /packages
+/.vs

@@ -8,6 +8,5 @@ namespace SergejDerjabkin.VSAssemblyResolver
     {
         public const uint cmdidPopulateToolbox =        0x100;
 
-
     };
 }
