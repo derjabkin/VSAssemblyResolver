@@ -294,16 +294,17 @@ namespace SergejDerjabkin.VSAssemblyResolver
 			var task = System.Threading.Tasks.Task.Run<string[]>(() => GetReferenceDirectoriesCore());
 
             //This is a very dirty workaround for a deadlock that occurs when accessing solution object
-			if (task.Wait(1000))
+			if (task.Wait(10000))
 				return task.Result;
 
+            WriteOutput("GetReferenceDirectories: Timeout expired.");
 			return new string[0];
 		}
 
         private static string GetPackagesDirectory(DTE dte)
         {
             if (dte == null)
-                throw new ArgumentNullException("dte");
+                throw new ArgumentNullException(nameof(dte));
 
             if (dte.Solution == null)
                 return null;
