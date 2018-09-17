@@ -1,7 +1,7 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <PackageManifest Version="2.0.0" xmlns="http://schemas.microsoft.com/developer/vsx-schema/2011" xmlns:d="http://schemas.microsoft.com/developer/vsx-schema-design/2011">
     <Metadata>
-        <Identity Id="51B2E594-B2E7-405A-9943-50C758CCEBA7" Version="0.33" Language="en-US" Publisher="Sergej Derjabkin" />
+        <Identity Id="51B2E594-B2E7-405A-9943-50C758CCEBA7" Version="0.35" Language="en-US" Publisher="Sergej Derjabkin" />
         <DisplayName>VSAssemblyResolver 2017</DisplayName>
         <Description xml:space="preserve">Resolves assemblies paths at design time
 

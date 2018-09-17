@@ -1,26 +1,27 @@
-﻿using System;
+﻿using EnvDTE;
+using Microsoft.VisualStudio;
+using Microsoft.VisualStudio.Shell;
+using Microsoft.VisualStudio.Shell.Design;
+using Microsoft.VisualStudio.Shell.Interop;
+using Microsoft.VisualStudio.Toolbox;
+using System;
 using System.Collections.Generic;
+using System.ComponentModel;
+using System.ComponentModel.Design;
 using System.Diagnostics;
+using System.Drawing;
+using System.Drawing.Design;
 using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Runtime.InteropServices;
-using System.ComponentModel.Design;
-using Microsoft.VisualStudio.Shell.Design;
-using Microsoft.VisualStudio;
-using Microsoft.VisualStudio.Shell.Interop;
-using Microsoft.VisualStudio.Shell;
-using EnvDTE;
-using VSLangProj;
-using Microsoft.VisualStudio.Toolbox;
-using System.Drawing.Design;
 using System.Runtime.Serialization;
-using System.ComponentModel;
 using System.Runtime.Versioning;
-using System.Threading.Tasks.Dataflow;
-using System.Drawing;
+using System.Threading;
 using System.Threading.Tasks;
+using System.Threading.Tasks.Dataflow;
+using VSLangProj;
 
 namespace SergejDerjabkin.VSAssemblyResolver
 {
@@ -36,7 +37,7 @@ namespace SergejDerjabkin.VSAssemblyResolver
     /// </summary>
     // This attribute tells the PkgDef creation utility (CreatePkgDef.exe) that this class is
     // a package.
-    [PackageRegistration(UseManagedResourcesOnly = true)]
+    [PackageRegistration(UseManagedResourcesOnly = true, AllowsBackgroundLoading = true)]
     // This attribute is used to register the information needed to show this package
     // in the Help/About dialog of Visual Studio.
     [InstalledProductRegistration("#110", "#112", "0.5", IconResourceID = 400)]
@@ -45,7 +46,7 @@ namespace SergejDerjabkin.VSAssemblyResolver
     [ProvideAutoLoad(VSConstants.UICONTEXT.SolutionHasSingleProject_string)]
     [ProvideAutoLoad(VSConstants.UICONTEXT.SolutionHasMultipleProjects_string)]
     [Guid(GuidList.guidVSAssemblyResolverPkgString)]
-    public sealed class VSAssemblyResolverPackage : Package
+    public sealed class VSAssemblyResolverPackage : AsyncPackage
     {
         private Guid outputPaneGuid = new Guid("5540917A-D013-4C31-8F80-94F3B783FE88");
         private const string outputPaneTitle = "VSAssemblyResolver";
@@ -55,18 +56,6 @@ namespace SergejDerjabkin.VSAssemblyResolver
         private BufferBlock<string> outputBuffer;
 
 
-        /// <summary>
-        /// Default constructor of the package.
-        /// Inside this method you can place any initialization code that does not require 
-        /// any Visual Studio service because at this point the package object is created but 
-        /// not sited yet inside Visual Studio environment. The place to do all the other 
-        /// initialization is the Initialize method.
-        /// </summary>
-        public VSAssemblyResolverPackage()
-        {
-            Debug.WriteLine(string.Format(CultureInfo.CurrentCulture, "Entering constructor for: {0}", this.ToString()));
-        }
-
 
         private IVsOutputWindowPane OutputPane
         {
@@ -74,8 +63,7 @@ namespace SergejDerjabkin.VSAssemblyResolver
             {
                 if (outputPane == null)
                 {
-                    IVsOutputWindow window = GetGlobalService(typeof(SVsOutputWindow)) as IVsOutputWindow;
-                    if (window != null)
+                    if (GetGlobalService(typeof(SVsOutputWindow)) is IVsOutputWindow window)
                     {
                         window.CreatePane(ref outputPaneGuid, outputPaneTitle, 1, 1);
                         window.GetPane(ref outputPaneGuid, out outputPane);
@@ -111,19 +99,19 @@ namespace SergejDerjabkin.VSAssemblyResolver
         /// Initialization of the package; this method is called right after the package is sited, so this is the place
         /// where you can put all the initialization code that rely on services provided by VisualStudio.
         /// </summary>
-        protected override void Initialize()
+        /// 
+        protected override async System.Threading.Tasks.Task InitializeAsync(CancellationToken cancellationToken, IProgress<ServiceProgressData> progress)
         {
-            
+
             Debug.WriteLine(string.Format(CultureInfo.CurrentCulture, "Entering Initialize() of: {0}", this.ToString()));
-            base.Initialize();
+            await base.InitializeAsync(cancellationToken, progress);
 
             // Create output buffer ans start consumer.
             outputBuffer = new BufferBlock<string>();
-            WriteOutputAsync(outputBuffer);
+            await WriteOutputAsync(outputBuffer);
 
             // Add our command handlers for menu (commands must exist in the .vsct file)
-            OleMenuCommandService mcs = GetService(typeof(IMenuCommandService)) as OleMenuCommandService;
-            if (null != mcs)
+            if (await GetServiceAsync(typeof(IMenuCommandService)) is OleMenuCommandService mcs)
             {
                 // Create the command for the menu item.
                 CommandID menuCommandID = new CommandID(GuidList.guidVSAssemblyResolverCmdSet, (int)PkgCmdIDList.cmdidPopulateToolbox);
@@ -131,7 +119,7 @@ namespace SergejDerjabkin.VSAssemblyResolver
                 mcs.AddCommand(menuItem);
             }
 
-            var dte = GetDte();
+            var dte = await GetDteAsync();
             dte.Events.SolutionEvents.Opened += () =>
             {
                 foreach (Project project in dte.Solution.Projects)
@@ -141,16 +129,16 @@ namespace SergejDerjabkin.VSAssemblyResolver
                 solutionOpened = true;
             };
             dte.Events.SolutionEvents.ProjectAdded += WireProjectEvents;
-            RegisterSolutionServices();
+            await RegisterSolutionServices();
 
             AppDomain.CurrentDomain.AssemblyResolve += CurrentDomain_AssemblyResolve;
             AppDomain.CurrentDomain.ReflectionOnlyAssemblyResolve += CurrentDomain_ReflectionOnlyAssemblyResolve;
 
         }
 
-        private void RegisterSolutionServices()
+        private async System.Threading.Tasks.Task RegisterSolutionServices()
         {
-            string packageDirectory = GetPackagesDirectory(GetDte());
+            string packageDirectory = GetPackagesDirectory(await GetDteAsync());
             if (!Directory.Exists(packageDirectory)) return;
 
             var servicesDirectories = Directory.GetDirectories(packageDirectory, "*VSARService*");
@@ -205,9 +193,8 @@ namespace SergejDerjabkin.VSAssemblyResolver
         }
         private void WireProjectEvents(Project project)
         {
-            VSProject vsProject = project.Object as VSProject;
 
-            if (vsProject != null)
+            if (project.Object is VSProject vsProject)
             {
                 vsProject.Events.ReferencesEvents.ReferenceAdded += r => InvalidateCache();
                 vsProject.Events.ReferencesEvents.ReferenceChanged += r => InvalidateCache();
@@ -234,48 +221,44 @@ namespace SergejDerjabkin.VSAssemblyResolver
         }
 
 
-        private IEnumerable<string> GetReferenceDirectoriesEnum()
+        private async Task<string[]> GetReferenceDirectoriesEnum()
         {
             if (!solutionOpened)
-                yield break;
+                return new string[0];
 
-            DTE dte = GetDte();
-            foreach (Project project in dte.Solution.Projects)
-            {
-                var vsp = project.Object as VSProject;
-                if (vsp != null)
-                {
-                    foreach (Reference reference in vsp.References)
-                    {
-                        if (!string.IsNullOrWhiteSpace(reference.Path))
-                        {
-                            yield return Path.GetDirectoryName(reference.Path);
-                        }
-                    }
-                }
-            }
+            DTE dte = await GetDteAsync();
+
+            return dte.Solution.Projects
+                .OfType<Project>()
+                .Select(p => p.Object)
+                .OfType<VSProject>()
+                .SelectMany(vsp => vsp.References.OfType<Reference>())
+                .Where(r => !string.IsNullOrWhiteSpace(r.Path))
+                .Select(r => Path.GetDirectoryName(r.Path))
+                .Distinct()
+                .ToArray();
         }
 
 
 
         private DTE dteCache;
-        private DTE GetDte()
+        private async Task<DTE> GetDteAsync()
         {
-            return dteCache ?? (dteCache = (DTE)GetService(typeof(DTE)));
+            return dteCache ?? (dteCache = (DTE)await GetServiceAsync(typeof(DTE)));
         }
 
 
-        private string[] GetReferenceDirectoriesCore()
+        private async Task<string[]> GetReferenceDirectoriesCore()
         {
-            DTE dte = GetDte();
+            DTE dte = await GetDteAsync();
 
             if (dte == null || dte.Solution == null || string.IsNullOrEmpty(dte.Solution.FileName))
                 return new string[0];
 
             var dirs =
                 new string[] { GetPackagesDirectory(dte) }
-                    .Concat(GetReferenceDirectoriesEnum())
-                    .Select(d => Path.GetFullPath(d))
+                    .Concat(await GetReferenceDirectoriesEnum())
+                    .Select(Path.GetFullPath)
                     .OrderBy(s => s.Length)
                     .ToList();
 
@@ -289,17 +272,17 @@ namespace SergejDerjabkin.VSAssemblyResolver
             return dirs.ToArray();
         }
 
-		private string[] GetReferenceDirectories()
-		{
-			var task = System.Threading.Tasks.Task.Run<string[]>(() => GetReferenceDirectoriesCore());
+        private string[] GetReferenceDirectories()
+        {
+            var task = System.Threading.Tasks.Task.Run<string[]>(() => GetReferenceDirectoriesCore());
 
             //This is a very dirty workaround for a deadlock that occurs when accessing solution object
-			if (task.Wait(10000))
-				return task.Result;
+            if (task.Wait(10000))
+                return task.Result;
 
             WriteOutput("GetReferenceDirectories: Timeout expired.");
-			return new string[0];
-		}
+            return new string[0];
+        }
 
         private static string GetPackagesDirectory(DTE dte)
         {
@@ -379,7 +362,7 @@ namespace SergejDerjabkin.VSAssemblyResolver
         {
             get
             {
-                if(typeResolver == null)
+                if (typeResolver == null)
                 {
                     typeResolver = (DynamicTypeService)GetService(typeof(DynamicTypeService));
                 }
@@ -387,7 +370,7 @@ namespace SergejDerjabkin.VSAssemblyResolver
                 return typeResolver;
             }
         }
-        
+
         Assembly CurrentDomain_AssemblyResolve(object sender, ResolveEventArgs args)
         {
 
@@ -476,14 +459,13 @@ namespace SergejDerjabkin.VSAssemblyResolver
         private void MenuItemCallback(object sender, EventArgs e)
         {
             DynamicTypeService typeResolverService = (DynamicTypeService)GetService(typeof(DynamicTypeService));
-            IVsToolboxService2 toolBoxService = GetService(typeof(IToolboxService)) as IVsToolboxService2;
 
-            
-            if (toolBoxService != null)
+
+            if (GetService(typeof(IToolboxService)) is IVsToolboxService2 toolBoxService)
             {
                 try
                 {
-                    IList<Tuple<string, ToolboxItem, IEnumerable<FrameworkName>, Guid>> items = new List<Tuple<string, ToolboxItem, IEnumerable<FrameworkName>, Guid>>();
+                    var items = new List<Tuple<string, ToolboxItem, IEnumerable<FrameworkName>, Guid>>();
                     HashSet<string> processedAssemblies = new HashSet<string>();
                     foreach (var directory in GetReferenceDirectories())
                     {
@@ -516,7 +498,7 @@ namespace SergejDerjabkin.VSAssemblyResolver
                     }
                     toolBoxService.AddToolboxItems(items, null);
                 }
-                catch(Exception ex)
+                catch (Exception ex)
                 {
                     Debug.WriteLine(ex.ToString());
                 }
@@ -524,7 +506,6 @@ namespace SergejDerjabkin.VSAssemblyResolver
             // Show a Message Box to prove we were here
             IVsUIShell uiShell = (IVsUIShell)GetService(typeof(SVsUIShell));
             Guid clsid = Guid.Empty;
-            int result;
             ErrorHandler.ThrowOnFailure(uiShell.ShowMessageBox(
                        0,
                        ref clsid,
@@ -536,10 +517,10 @@ namespace SergejDerjabkin.VSAssemblyResolver
                        OLEMSGDEFBUTTON.OLEMSGDEFBUTTON_FIRST,
                        OLEMSGICON.OLEMSGICON_INFO,
                        0,        // false
-                       out result));
+                       out int result));
         }
 
-        
+
     }
 
     [Serializable]
@@ -557,7 +538,7 @@ namespace SergejDerjabkin.VSAssemblyResolver
             if (tb != null)
             {
                 return (Bitmap)tb.GetImage(toolType);
-                
+
             }
 
             return null;
