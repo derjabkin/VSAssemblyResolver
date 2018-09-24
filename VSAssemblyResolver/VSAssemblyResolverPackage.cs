@@ -82,7 +82,7 @@ namespace SergejDerjabkin.VSAssemblyResolver
         {
             while (await source.OutputAvailableAsync())
             {
-                string data = source.Receive();
+                string data = await source.ReceiveAsync();
                 if (OutputPane != null)
                 {
                     OutputPane.OutputStringThreadSafe(data);
@@ -108,7 +108,7 @@ namespace SergejDerjabkin.VSAssemblyResolver
 
             // Create output buffer ans start consumer.
             outputBuffer = new BufferBlock<string>();
-            await WriteOutputAsync(outputBuffer);
+            WriteOutputAsync(outputBuffer);
 
             // Add our command handlers for menu (commands must exist in the .vsct file)
             if (await GetServiceAsync(typeof(IMenuCommandService)) is OleMenuCommandService mcs)
@@ -208,6 +208,12 @@ namespace SergejDerjabkin.VSAssemblyResolver
             {
                 missingAssembliesCache.Clear();
             }
+            System.Threading.Tasks.Task.Run(async () => { referenceDirectories = await GetReferenceDirectoriesCoreAsync(); });
+
+        }
+
+        private async System.Threading.Tasks.Task PopulateReferenceDirectoriesAsync()
+        {
         }
 
         Assembly CurrentDomain_ReflectionOnlyAssemblyResolve(object sender, ResolveEventArgs args)
@@ -248,10 +254,9 @@ namespace SergejDerjabkin.VSAssemblyResolver
         }
 
 
-        private async Task<string[]> GetReferenceDirectoriesCore()
+        private async Task<string[]> GetReferenceDirectoriesCoreAsync()
         {
             DTE dte = await GetDteAsync();
-
             if (dte == null || dte.Solution == null || string.IsNullOrEmpty(dte.Solution.FileName))
                 return new string[0];
 
@@ -272,16 +277,21 @@ namespace SergejDerjabkin.VSAssemblyResolver
             return dirs.ToArray();
         }
 
+
+        private string[] referenceDirectories;
         private string[] GetReferenceDirectories()
         {
-            var task = System.Threading.Tasks.Task.Run<string[]>(() => GetReferenceDirectoriesCore());
+            if (referenceDirectories == null)
+            {
+                var task = System.Threading.Tasks.Task.Run(() => GetReferenceDirectoriesCoreAsync());
 
-            //This is a very dirty workaround for a deadlock that occurs when accessing solution object
-            if (task.Wait(10000))
-                return task.Result;
-
-            WriteOutput("GetReferenceDirectories: Timeout expired.");
-            return new string[0];
+                //This is a very dirty workaround for a deadlock that occurs when accessing solution object
+                if (task.Wait(10000))
+                    referenceDirectories = task.Result;
+                else
+                    WriteOutput("GetReferenceDirectories: Timeout expired.");
+            }
+            return referenceDirectories ?? new string[0];
         }
 
         private static string GetPackagesDirectory(DTE dte)
