@@ -45,9 +45,9 @@ namespace SergejDerjabkin.VSAssemblyResolver
         private const string outputPaneTitle = "VSAssemblyResolver";
         private IVsOutputWindowPane outputPane;
         private readonly HashSet<string> missingAssembliesCache = new HashSet<string>();
-        private bool solutionOpened;
         private BufferBlock<string> outputBuffer;
-
+        private SolutionEvents solutionEvents;
+        private BuildEvents buildEvents;
 
 
         private IVsOutputWindowPane OutputPane
@@ -115,24 +115,26 @@ namespace SergejDerjabkin.VSAssemblyResolver
             }
 
             var dte = await GetDteAsync();
-            dte.Events.SolutionEvents.Opened += () =>
+            buildEvents = dte.Events.BuildEvents;
+            buildEvents.OnBuildDone += (s, e) => InvalidateCache();
+            solutionEvents = dte.Events.SolutionEvents;
+            solutionEvents.Opened += () =>
             {
                 Microsoft.VisualStudio.Shell.ThreadHelper.ThrowIfNotOnUIThread();
                 foreach (Project project in dte.Solution.Projects)
                     WireProjectEvents(project);
 
                 InvalidateCache();
-                solutionOpened = true;
             };
             dte.Events.SolutionEvents.ProjectAdded += WireProjectEvents;
-            await RegisterSolutionServices();
+            await RegisterSolutionServicesAsync();
 
             AppDomain.CurrentDomain.AssemblyResolve += CurrentDomain_AssemblyResolve;
             AppDomain.CurrentDomain.ReflectionOnlyAssemblyResolve += CurrentDomain_ReflectionOnlyAssemblyResolve;
-
+            referenceDirectories = await GetReferenceDirectoriesCoreAsync();
         }
 
-        private async System.Threading.Tasks.Task RegisterSolutionServices()
+        private async System.Threading.Tasks.Task RegisterSolutionServicesAsync()
         {
             string packageDirectory = GetPackagesDirectory(await GetDteAsync());
             if (!Directory.Exists(packageDirectory)) return;
@@ -219,22 +221,23 @@ namespace SergejDerjabkin.VSAssemblyResolver
         }
 
 
-        private async Task<string[]> GetReferenceDirectoriesEnum()
+        private async Task<string[]> GetReferenceDirectoriesFromProjectsAsync()
         {
-            if (!solutionOpened)
-                return new string[0];
-
             DTE dte = await GetDteAsync();
 
-            return dte.Solution.Projects
-                .OfType<Project>()
-                .Select(p => p.Object)
-                .OfType<VSProject>()
-                .SelectMany(vsp => vsp.References.OfType<Reference>())
-                .Where(r => !string.IsNullOrWhiteSpace(r.Path))
-                .Select(r => Path.GetDirectoryName(r.Path))
-                .Distinct()
-                .ToArray();
+            Solution solution = dte?.Solution;
+            if (solution != null)
+                return solution.Projects
+                    .OfType<Project>()
+                    .Select(p => p.Object)
+                    .OfType<VSProject>()
+                    .SelectMany(vsp => vsp.References.OfType<Reference>())
+                    .Where(r => !string.IsNullOrWhiteSpace(r.Path))
+                    .Select(r => Path.GetDirectoryName(r.Path))
+                    .Distinct()
+                    .ToArray();
+
+            return Array.Empty<string>();
         }
 
 
@@ -261,7 +264,7 @@ namespace SergejDerjabkin.VSAssemblyResolver
 
                 var dirs =
                     new string[] { GetPackagesDirectory(dte) }
-                        .Concat(await GetReferenceDirectoriesEnum())
+                        .Concat(await GetReferenceDirectoriesFromProjectsAsync())
                         .Select(Path.GetFullPath)
                         .OrderBy(s => s.Length)
                         .ToList();
@@ -376,8 +379,8 @@ namespace SergejDerjabkin.VSAssemblyResolver
         Assembly CurrentDomain_AssemblyResolve(object sender, ResolveEventArgs args)
         {
 
-            //if (IsMissingAssembly(args.Name))
-              //  return null;
+            if (IsMissingAssembly(args.Name))
+                return null;
 
             WriteOutput("Resolving assembly {0}", args.Name);
 

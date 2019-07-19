@@ -9,3 +9,4 @@ Build/Temp
 TestResults
 /packages
 .vs
+*.bak
