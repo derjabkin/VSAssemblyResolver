@@ -365,18 +365,7 @@ namespace SergejDerjabkin.VSAssemblyResolver
 
 
         private DynamicTypeService typeResolver;
-        private DynamicTypeService TypeResolver
-        {
-            get
-            {
-                if (typeResolver == null)
-                {
-                    typeResolver = (DynamicTypeService)GetService(typeof(DynamicTypeService));
-                }
-
-                return typeResolver;
-            }
-        }
+        private DynamicTypeService TypeResolver => typeResolver ?? (typeResolver = (DynamicTypeService)GetService(typeof(DynamicTypeService)));
 
         Assembly CurrentDomain_AssemblyResolve(object sender, ResolveEventArgs args)
         {
