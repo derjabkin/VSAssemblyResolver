@@ -36,11 +36,8 @@ namespace SergejDerjabkin.VSAssemblyResolver
     // This attribute tells the PkgDef creation utility (CreatePkgDef.exe) that this class is
     // a package.
     [PackageRegistration(UseManagedResourcesOnly = true, AllowsBackgroundLoading = true)]
-    // This attribute is used to register the information needed to show this package
-    // in the Help/About dialog of Visual Studio.
-    [InstalledProductRegistration("#110", "#112", "0.5", IconResourceID = 400)]
-    // This attribute is needed to let the shell know that this package exposes some menus.
     [ProvideMenuResource("Menus.ctmenu", 1)]
+    [ProvideAutoLoad(UIContextGuids80.NoSolution, PackageAutoLoadFlags.BackgroundLoad)]
     [Guid(GuidList.guidVSAssemblyResolverPkgString)]
     public sealed class VSAssemblyResolverPackage : AsyncPackage
     {
@@ -100,9 +97,9 @@ namespace SergejDerjabkin.VSAssemblyResolver
         /// 
         protected override async System.Threading.Tasks.Task InitializeAsync(CancellationToken cancellationToken, IProgress<ServiceProgressData> progress)
         {
-
             Debug.WriteLine(string.Format(CultureInfo.CurrentCulture, "Entering Initialize() of: {0}", ToString()));
             await base.InitializeAsync(cancellationToken, progress);
+            await JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
 
             // Create output buffer ans start consumer.
             outputBuffer = new BufferBlock<string>();
@@ -120,6 +117,7 @@ namespace SergejDerjabkin.VSAssemblyResolver
             var dte = await GetDteAsync();
             dte.Events.SolutionEvents.Opened += () =>
             {
+                Microsoft.VisualStudio.Shell.ThreadHelper.ThrowIfNotOnUIThread();
                 foreach (Project project in dte.Solution.Projects)
                     WireProjectEvents(project);
 
@@ -210,10 +208,6 @@ namespace SergejDerjabkin.VSAssemblyResolver
 
         }
 
-        private async System.Threading.Tasks.Task PopulateReferenceDirectoriesAsync()
-        {
-        }
-
         Assembly CurrentDomain_ReflectionOnlyAssemblyResolve(object sender, ResolveEventArgs args)
         {
             string path = GetAssemblyPath(args.Name);
@@ -251,51 +245,51 @@ namespace SergejDerjabkin.VSAssemblyResolver
             return dteCache ?? (dteCache = (DTE)await GetServiceAsync(typeof(DTE)));
         }
 
+        private static bool inGetReferenceDirectories;
 
         private async Task<string[]> GetReferenceDirectoriesCoreAsync()
         {
-            DTE dte = await GetDteAsync();
-            if (dte == null || dte.Solution == null || string.IsNullOrEmpty(dte.Solution.FileName))
-                return new string[0];
-
-            var dirs =
-                new string[] { GetPackagesDirectory(dte) }
-                    .Concat(await GetReferenceDirectoriesEnum())
-                    .Select(Path.GetFullPath)
-                    .OrderBy(s => s.Length)
-                    .ToList();
-
-
-            for (int i = 1; i < dirs.Count; i++)
+            if (inGetReferenceDirectories) return Array.Empty<string>();
+            try
             {
-                if (dirs.Where(d => dirs[i].StartsWith(d, StringComparison.OrdinalIgnoreCase), 0, i - 1).Any())
-                    dirs.RemoveAt(i--);
-            }
+                inGetReferenceDirectories = true;
+                DTE dte = await GetDteAsync();
+                await JoinableTaskFactory.SwitchToMainThreadAsync(DisposalToken);
+                string solutionFile = dte?.Solution?.FileName;
+                if (string.IsNullOrEmpty(solutionFile))
+                    return new string[0];
 
-            return dirs.ToArray();
+                var dirs =
+                    new string[] { GetPackagesDirectory(dte) }
+                        .Concat(await GetReferenceDirectoriesEnum())
+                        .Select(Path.GetFullPath)
+                        .OrderBy(s => s.Length)
+                        .ToList();
+
+
+                for (int i = 1; i < dirs.Count; i++)
+                {
+                    if (dirs.Where(d => dirs[i].StartsWith(d, StringComparison.OrdinalIgnoreCase), 0, i - 1).Any())
+                        dirs.RemoveAt(i--);
+                }
+
+                return dirs.ToArray();
+            }
+            finally
+            {
+                inGetReferenceDirectories = false;
+            }
         }
 
 
         private string[] referenceDirectories;
-        private string[] GetReferenceDirectories()
-        {
-            if (referenceDirectories == null)
-            {
-                var task = System.Threading.Tasks.Task.Run(() => GetReferenceDirectoriesCoreAsync());
-
-                //This is a very dirty workaround for a deadlock that occurs when accessing solution object
-                if (task.Wait(10000))
-                    referenceDirectories = task.Result;
-                else
-                    WriteOutput("GetReferenceDirectories: Timeout expired.");
-            }
-            return referenceDirectories ?? new string[0];
-        }
+        private string[] GetReferenceDirectories() => referenceDirectories ?? new string[0];
 
         private static string GetPackagesDirectory(DTE dte)
         {
             if (dte == null)
                 throw new ArgumentNullException(nameof(dte));
+            ThreadHelper.ThrowIfNotOnUIThread();
 
             if (dte.Solution == null)
                 return null;
@@ -382,8 +376,8 @@ namespace SergejDerjabkin.VSAssemblyResolver
         Assembly CurrentDomain_AssemblyResolve(object sender, ResolveEventArgs args)
         {
 
-            if (IsMissingAssembly(args.Name))
-                return null;
+            //if (IsMissingAssembly(args.Name))
+              //  return null;
 
             WriteOutput("Resolving assembly {0}", args.Name);
 
