@@ -103,7 +103,7 @@ namespace SergejDerjabkin.VSAssemblyResolver
 
             // Create output buffer ans start consumer.
             outputBuffer = new BufferBlock<string>();
-            WriteOutputAsync(outputBuffer);
+            var writeOutputTask = WriteOutputAsync(outputBuffer);
 
             // Add our command handlers for menu (commands must exist in the .vsct file)
             if (await GetServiceAsync(typeof(IMenuCommandService)) is OleMenuCommandService mcs)
@@ -191,7 +191,7 @@ namespace SergejDerjabkin.VSAssemblyResolver
         }
         private void WireProjectEvents(Project project)
         {
-
+            ThreadHelper.ThrowIfNotOnUIThread();
             if (project.Object is VSProject vsProject)
             {
                 vsProject.Events.ReferencesEvents.ReferenceAdded += r => InvalidateCache();
@@ -224,6 +224,7 @@ namespace SergejDerjabkin.VSAssemblyResolver
         private async Task<string[]> GetReferenceDirectoriesFromProjectsAsync()
         {
             DTE dte = await GetDteAsync();
+            await JoinableTaskFactory.SwitchToMainThreadAsync(DisposalToken);
 
             Solution solution = dte?.Solution;
             if (solution != null)
@@ -245,6 +246,7 @@ namespace SergejDerjabkin.VSAssemblyResolver
         private DTE dteCache;
         private async Task<DTE> GetDteAsync()
         {
+            await JoinableTaskFactory.SwitchToMainThreadAsync(DisposalToken);
             return dteCache ?? (dteCache = (DTE)await GetServiceAsync(typeof(DTE)));
         }
 
@@ -419,18 +421,7 @@ namespace SergejDerjabkin.VSAssemblyResolver
         }
 
 
-        private Assembly LoadReflectionAssemblySafe(string fileName)
-        {
-            try
-            {
-                return Assembly.ReflectionOnlyLoadFrom(fileName);
-            }
-            catch (BadImageFormatException) { }
-            catch (FileLoadException) { }
-            catch (FileNotFoundException) { }
-
-            return null;
-        }
+        
         private void AddMissingAssembly(ResolveEventArgs args)
         {
             lock (missingAssembliesCache)

@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <PackageManifest Version="2.0.0" xmlns="http://schemas.microsoft.com/developer/vsx-schema/2011" xmlns:d="http://schemas.microsoft.com/developer/vsx-schema-design/2011">
     <Metadata>
-        <Identity Id="VSAssemblyResolver.2bb63488-9009-4188-9453-2ca8357bf79d" Version="0.42" Language="en-US" Publisher="Sergej Derjabkin" />
+        <Identity Id="VSAssemblyResolver.2bb63488-9009-4188-9453-2ca8357bf79d" Version="0.43" Language="en-US" Publisher="Sergej Derjabkin" />
         <DisplayName>VSAssemblyResolver 2019</DisplayName>
         <Description xml:space="preserve">Resolving assmeblies wihtout GAC</Description>
     </Metadata>
